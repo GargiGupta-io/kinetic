@@ -90,6 +90,10 @@ def zip_working_dir(
 ) -> None:
   """Zip a directory into a ZIP archive, excluding common non-source files.
 
+  When in a git repository, respects ``.gitignore`` and uses git ls-files
+  to determine which files to include. Falls back to directory traversal
+  if not in a git repo.
+
   Excludes ``.git``, ``__pycache__``, and any paths in *exclude_paths*
   (which may be files or directories).
 
