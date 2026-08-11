@@ -102,21 +102,24 @@ def zip_working_dir(
   normalized_excludes = {os.path.normpath(p) for p in exclude_paths}
 
   with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-    for root, dirs, files in os.walk(base_dir):
-      # Exclude .git, __pycache__, and Data-referenced directories
-      dirs[:] = [
-        d
-        for d in dirs
-        if d not in [".git", "__pycache__"]
-        and os.path.normpath(os.path.join(root, d)) not in normalized_excludes
-      ]
+    git_files = _list_git_files(base_dir)
+    if git_files is not None:
+      _write_git_files(zipf, base_dir, git_files, normalized_excludes)
+    else:
+      for root, dirs, files in os.walk(base_dir):
+        dirs[:] = [
+          d
+          for d in dirs
+          if d not in [".git", "__pycache__"]
+          and os.path.normpath(os.path.join(root, d)) not in normalized_excludes
+        ]
 
-      for file in files:
-        file_path = os.path.join(root, file)
-        if os.path.normpath(file_path) in normalized_excludes:
-          continue
-        archive_name = os.path.relpath(file_path, base_dir)
-        zipf.write(file_path, archive_name)
+        for file in files:
+          file_path = os.path.join(root, file)
+          if os.path.normpath(file_path) in normalized_excludes:
+            continue
+          archive_name = os.path.relpath(file_path, base_dir)
+          zipf.write(file_path, archive_name)
 
 
 def save_payload(
