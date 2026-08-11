@@ -11,6 +11,9 @@ from absl.testing import absltest
 
 from kinetic.data import Data
 from kinetic.utils.packager import (
+  _list_git_files,
+  _path_is_excluded,
+  _write_git_files,
   extract_data_refs,
   replace_data_with_refs,
   save_payload,
@@ -126,6 +129,55 @@ class TestZipWorkingDir(absltest.TestCase):
 
     names = self._zip_and_list(src, tmp_path, exclude_paths={str(d1), str(d2)})
     self.assertEqual(names, {"main.py"})
+
+  def test_list_git_files_respects_gitignore(self):
+    """Test that _list_git_files respects .gitignore."""
+    tmp_path = _make_temp_path(self)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / ".git").mkdir()
+    (src / ".git" / "config").write_text("")
+    (src / ".gitignore").write_text("*.pyc\n__pycache__/\n")
+    (src / "main.py").write_text("code")
+    (src / "cache.pyc").write_text("compiled")
+
+    import subprocess
+    subprocess.run(["git", "-C", str(src), "init"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(src), "add", "."], check=True, capture_output=True)
+
+    files = _list_git_files(str(src))
+    self.assertIsNotNone(files)
+    self.assertIn("main.py", files)
+    self.assertIn(".gitignore", files)
+    self.assertNotIn("cache.pyc", files)
+
+  def test_write_git_files_excludes_paths(self):
+    """Test that _write_git_files respects exclude_paths."""
+    tmp_path = _make_temp_path(self)
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / ".git").mkdir()
+    (src / ".git" / "config").write_text("")
+    (src / "main.py").write_text("code")
+    exclude_dir = src / "private"
+    exclude_dir.mkdir()
+    (exclude_dir / "secret.txt").write_text("secret")
+
+    import subprocess
+    subprocess.run(["git", "-C", str(src), "init"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(src), "add", "."], check=True, capture_output=True)
+
+    files = _list_git_files(str(src))
+    self.assertIsNotNone(files)
+
+    out = tmp_path / "output.zip"
+    with zipfile.ZipFile(str(out), "w") as zf:
+      _write_git_files(zf, str(src), files, {str(exclude_dir)})
+
+    with zipfile.ZipFile(str(out)) as zf:
+      names = zf.namelist()
+      self.assertIn("main.py", names)
+      self.assertTrue(all("secret" not in n for n in names))
 
 
 class TestSavePayload(absltest.TestCase):
